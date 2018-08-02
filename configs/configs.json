@@ -1,0 +1,15 @@
+{
+  "hardware": {
+    "shelf_manager": "shm-b084-sp02",
+    "slot": 1,
+    "fru_ip_address": "shm-b033-sp01"
+  },
+  "test": {
+    "test_duration_minutes": 1,
+    "ipmi_command": "sensor get \"FRU_HOTSWAP_1\"",
+    "commands": {
+      "activate": "picmg activate 0",
+      "deactivate": "picmg deactive 0"
+    }
+  }
+}
