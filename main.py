@@ -45,11 +45,11 @@ def main():
 
     # If the user indicates the test duration to be -1, the test will keep running until it encounters an unrecoverable
     # failure. Otherwise, the test will stop after reaching the user's run limits (in seconds)
-    test_duration_seconds = int(test_configs["test"]["test_duration_minutes"])
+    test_duration_seconds = int(test_configs["test"]["test_duration_minutes"] * 60)
     if test_duration_seconds == -1:
         logger.info("Looping test indefinitely. Press <Ctrl-C> to terminate.\n")
     else:
-        logger.info("Looping test for {0} minutes. Press <Ctrl-C> to terminate.\n".format(test_duration_seconds))
+        logger.info("Looping test for {0} seconds. Press <Ctrl-C> to terminate.\n".format(test_duration_seconds))
 
     # The board IP address to ping to confirm its activation/deactivation
     board_ip_address = test_configs["hardware"]["fpga_board_ip_address"]
@@ -93,7 +93,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, tes
 
     timeout = 0
     if test_duration_seconds != -1:
-        timeout = time.time() + test_duration_seconds * 60
+        timeout = time.time() + test_duration_seconds
     while True:
         if test_duration_seconds != -1 and time.time() > timeout:
             break
@@ -102,7 +102,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, tes
 
         # Running board deactivation test
         while retry_count <= retries:
-            logger.debug("\n*** BOARD DEACTIVATION ***")
+            logger.info("\n*** BOARD DEACTIVATION ***")
             _run_cmd(deactivation_cmd)
             if not _detect_board_active(board_ip_address, expected_board_is_active=False):
                 if retry_count < retries:
@@ -120,7 +120,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, tes
 
         # Running board activation test
         while retry_count < retries:
-            logger.debug("\n*** BOARD ACTIVATION ***")
+            logger.info("\n*** BOARD ACTIVATION ***")
             _run_cmd(activation_cmd)
             if not _detect_board_active(board_ip_address, expected_board_is_active=True):
                 if retry_count < retries:
@@ -134,8 +134,8 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, tes
                     raise RuntimeError
             else:
                 # Writing values to board
-                logger.debug("\n*** WRITING VALUE TO BOARD ***")
-                _write_values_to_board()
+                logger.info("\n*** WRITING VALUE TO BOARD ***")
+                _write_values_to_board(test_duration_seconds / 2 if test_duration_seconds < 600 else test_duration_seconds)
                 break
 
 
@@ -150,14 +150,14 @@ def _run_cmd(cmd, sleep_secs=30):
     sleep_secs : int
         The number of seconds to sleep after the command run is finished.
     """
-    logger.debug("----- Running IPMI comand: -----")
-    logger.debug(cmd)
+    logger.info("----- Running IPMI comand: -----")
+    logger.info(cmd)
 
     proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
     return_code = proc.returncode
 
-    logger.debug("Return Code: {0}\n".format(return_code))
+    logger.info("Return Code: {0}\n".format(return_code))
 
     stdout_data = stdout.decode()
     if len(stdout_data):
@@ -187,7 +187,7 @@ def _detect_board_active(board_ip_address, expected_board_is_active, ping_count=
     timeout : int
         The timeout for the detection command, in seconds
     """
-    logger.debug("\n\n----- Detecting if the board is active -----")
+    logger.info("\n\n----- Detecting if the board is active -----")
 
     # Send 10 pings (pinging for about 10 seconds)
     proc = Popen("ping " + board_ip_address + " -c " + str(ping_count), shell=True, stdout=PIPE, stderr=PIPE)
@@ -203,16 +203,16 @@ def _detect_board_active(board_ip_address, expected_board_is_active, ping_count=
                          "stdout: {1}\n\nstderr: {2}\n".format(ping_count, status, error))
             return False
         else:
-            logger.debug("The board is ACTIVE, as expected.")
+            logger.info("The board is ACTIVE, as expected.")
     elif not expected_board_is_active:
         if return_code == 0:
             logger.debug("The board is expected to be INACTIVE, but it still responds after {0} pings.\n"
                          "stdout: {1}\n\nstderr: {2}\n".format(ping_count, status, error))
             return False
         else:
-            logger.debug("The board is INACTIVE, as expected.")
+            logger.info("The board is INACTIVE, as expected.")
 
-    logger.debug("Board activeness detection is finished.\n")
+    logger.info("Board activeness detection is finished.\n")
     return True
 
 
