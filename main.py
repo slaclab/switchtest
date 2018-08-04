@@ -79,7 +79,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, tes
         The IP address of the board, used for pinging to confirm its activation/deactivation. The ping is expected
         to fail for deactivation of the board; and to be successful for the activation of the board
     test_duration_seconds : int
-        The total number of seconds to run the test
+        The total number of seconds to run the test. If test_duration is -1, run the test indefinitely.
     retries: int
         The number of retries the same command if it fails the first time.
 
@@ -91,9 +91,11 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, tes
         logger.error("Cannot start the test. The board has to be activated first.")
         raise SystemError
 
-    timeout = time.time() + test_duration_seconds * 60
+    timeout = 0
+    if test_duration_seconds != -1:
+        timeout = time.time() + test_duration_seconds * 60
     while True:
-        if time.time() > timeout:
+        if test_duration_seconds != -1 and time.time() > timeout:
             break
 
         retry_count = 0
