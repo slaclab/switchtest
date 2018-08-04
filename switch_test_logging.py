@@ -6,7 +6,7 @@ log_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(me
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
-rotating_log_handler = RotatingFileHandler(os.path.join("logs", "switch-test.log"), maxBytes=100000, backupCount=10000)
+rotating_log_handler = RotatingFileHandler(os.path.join("logs", "switch-test.log"), maxBytes=2000000, backupCount=30)
 rotating_log_handler.setFormatter(log_formatter)
 logger.addHandler(rotating_log_handler)
 
