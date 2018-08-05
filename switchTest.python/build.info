@@ -1,0 +1,23 @@
+tag build-MicrowaveMuxBpEth-0x00000010-20180725094144-mdewart
+Tagger: Mitch D'Ewart <mdewart@slac.stanford.edu>
+Date:   Wed Jul 25 14:02:13 2018 -0700
+
+PROJECT: MicrowaveMuxBpEth
+
+FW_VERSION: 0x00000010
+
+BUILD_STRING: MicrowaveMuxBpEth: Vivado v2018.2, rdsrv220 (x86_64), Built Wed Jul 25 09:41:44 PDT 2018 by mdewart
+
+commit c7b7b29e4fdcf2270859eca98569c33133648037
+Author: Mitch D'Ewart <mdewart@slac.stanford.edu>
+Date:   Wed Jul 25 09:40:58 2018 -0700
+
+    Merge AMCc v2.4.8, SPI cryo updates
+
+Submodule firmware/submodules/amc-carrier-core 4c1edab9...7ec33eb7:
+  > Merge branch 'jmdewart-cryo-spi' into adi-jesd
+  > Merge tag 'v2.4.8' into adi-jesd
+  < Start with cryo CPLD reset held high
+  > Add pipelining to JESD RX core
+  > Merge branch 'pre-release' into adi-jesd
+  < Add CPLD reset
