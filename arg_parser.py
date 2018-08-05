@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from switch_test_logging import logging
+from switchtest_logging import logging
 logger = logging.getLogger(__name__)
 
 

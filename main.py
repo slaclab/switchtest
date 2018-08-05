@@ -6,18 +6,18 @@ from subprocess import Popen, PIPE
 import json
 import time
 
+from switchtest_logging import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+import pyrogue as pr
+from FpgaTopLevel import *
+
 from version import VERSION
 from arg_parser import ArgParser
 
-from switch_test_logging import logging
-logger = logging.getLogger(__name__)
-
-from switchTest.scripts.switchTest import write_values
-
 
 def main():
-    logger.info("\n\n############ TEST STARTS #############\n")
-
     # Parsing command arguments
     args = _parse_arguments()
 
@@ -25,8 +25,15 @@ def main():
     test_configs = _parse_config_file(config_file)
 
     verbose_logging = vars(args)["verbose_logging"]
-    if not verbose_logging:
-        logger.setLevel(logging.INFO)
+
+    # Now set the logging level for just the test. The pyrogue logging level will still be at logging.WARNING
+    if verbose_logging:
+        logger.setLevel(logging.DEBUG)
+
+        global_logger = logging.getLogger()
+        global_logger.setLevel(logging.DEBUG)
+
+    logger.info("\n\n############ TEST STARTS #############\n")
 
     # Get the Shelf Manager address
     shelf_manager = test_configs["hardware"]["shelf_manager"]
@@ -35,7 +42,7 @@ def main():
     slot_number = test_configs["hardware"]["slot"]
     target = str(hex(int(0x80) + 2 * slot_number))
 
-    # IPMP command prefix. We'll be using the Ethernet (LAN) interface, with no authentication
+    # IPMI command prefix. We'll be using the Ethernet (LAN) interface, with no authentication
     cmd_prefix = 'ipmitool -I lan -H ' + shelf_manager + ' -t ' + str(target) + ' -b 0 -A NONE '
 
     # Get the customized status, board activation, and board deactivation commands from the user's configurations
@@ -43,27 +50,14 @@ def main():
     activation_cmd = cmd_prefix + test_configs["test"]["commands"]["activation"]
     deactivation_cmd = cmd_prefix + test_configs["test"]["commands"]["deactivation"]
 
-    # If the user indicates the test duration to be -1, the test will keep running until it encounters an unrecoverable
-    # failure. Otherwise, the test will stop after reaching the user's run limits (in seconds)
-    test_duration_seconds = int(test_configs["test"]["test_duration_minutes"] * 60)
-    if test_duration_seconds == -1:
-        logger.info("Looping test indefinitely. Press <Ctrl-C> to terminate.\n")
-    else:
-        logger.info("Looping test for {0} seconds. Press <Ctrl-C> to terminate.\n".format(test_duration_seconds))
-
-    # The board IP address to ping to confirm its activation/deactivation
-    board_ip_address = test_configs["hardware"]["fpga_board_ip_address"]
-
     # Run the test
-    run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address,
-             test_duration_seconds=test_duration_seconds)
+    run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs)
 
     logger.info("\n############ TEST ENDS #############\n\n")
     logger.info(''.join(['-' * 30, '\n']))
 
 
-def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, test_duration_seconds=60*60*24,
-             retries=10):
+def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries_on_test_phase_failure=10):
     """
     Run the test after verifying that the board is active. If the board is not, the test will terminate immediately.
 
@@ -75,42 +69,51 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, tes
         The command to deactivate the board
     status_cmd : str
         The status of the board, used for diagnostics if the activation/deactivation fails
-    board_ip_address : str
-        The IP address of the board, used for pinging to confirm its activation/deactivation. The ping is expected
-        to fail for deactivation of the board; and to be successful for the activation of the board
-    test_duration_seconds : int
-        The total number of seconds to run the test. If test_duration is -1, run the test indefinitely.
-    retries: int
+    test_configs : dict
+        The user settings to be applied to the test
+    retries_on_test_phase_failure: int
         The number of retries the same command if it fails the first time.
 
     Raises SystemError, RuntimeError
     """
+    # If the user indicates the test duration to be -1, the test will keep running until it encounters an unrecoverable
+    # failure. Otherwise, the test will stop after reaching the user's limit (number of test cycles to run)
+    test_duration = int(test_configs["test"]["cycles_to_run"])
+    if test_duration == -1:
+        logger.info("Looping the test indefinitely. Press <Ctrl-C> to terminate.")
+    else:
+        logger.info("Looping the test {0} times. Press <Ctrl-C> to terminate.".format(test_duration))
+
     # Make sure the board is active before starting the test
+    board_ip_address = test_configs["hardware"]["fpga_board_ip_address"]
     is_board_active = _detect_board_active(board_ip_address, expected_board_is_active=True)
     if not is_board_active:
         logger.error("Cannot start the test. The board has to be activated first.")
         raise SystemError
 
-    timeout = 0
-    if test_duration_seconds != -1:
-        timeout = time.time() + test_duration_seconds
+    run_count = 0
+    sleep_between_commands_secs = test_configs["test"]["sleep_between_commands_secs"]
+    sleep_after_fpga_writes_secs = test_configs["test"]["sleep_after_fpga_writes_secs"]
+    value_quantity_to_write_to_fpga = test_configs["test"]["value_quantity_to_write_to_fpga"]
+
     while True:
-        if test_duration_seconds != -1 and time.time() > timeout:
+        run_count += 1
+        if test_duration != -1 and run_count > test_duration:
             break
-
+        logger.info("\n=== Starting Test Iteration: {0} ===\n".format(run_count))
         retry_count = 0
-
         # Running board deactivation test
-        while retry_count <= retries:
-            logger.info("\n*** BOARD DEACTIVATION ***")
-            _run_cmd(deactivation_cmd)
+        while retry_count <= retries_on_test_phase_failure:
+            logger.info("--- BOARD DEACTIVATION ---")
+            _run_cmd(deactivation_cmd, sleep_between_commands_secs)
             if not _detect_board_active(board_ip_address, expected_board_is_active=False):
-                if retry_count < retries:
+                if retry_count < retries_on_test_phase_failure:
                     retry_count += 1
-                    logger.debug("Retrying board deactivation. Attempt {0} out of {1}".format(retry_count, retries))
+                    logger.info("Retrying board deactivation. Attempt {0} out of {1}"
+                                .format(retry_count, retries_on_test_phase_failure))
                 else:
                     # Run the status command to get diagnostic data
-                    _run_cmd(status_cmd)
+                    _run_cmd(status_cmd, sleep_between_commands_secs)
 
                     logger.error("The board CANNOT be DEACTIVATED. Ending the test.")
                     raise RuntimeError
@@ -119,23 +122,26 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, board_ip_address, tes
                 break
 
         # Running board activation test
-        while retry_count < retries:
-            logger.info("\n*** BOARD ACTIVATION ***")
-            _run_cmd(activation_cmd)
+        while retry_count < retries_on_test_phase_failure:
+            logger.info("--- BOARD ACTIVATION ---")
+            _run_cmd(activation_cmd, sleep_between_commands_secs)
             if not _detect_board_active(board_ip_address, expected_board_is_active=True):
-                if retry_count < retries:
+                if retry_count < retries_on_test_phase_failure:
                     retry_count += 1
-                    logger.debug("Retrying board activation. Attempt {0} out of {1}".format(retry_count, retries))
+                    logger.info("Retrying board activation. Attempt {0} out of {1}"
+                                .format(retry_count, retries_on_test_phase_failure))
                 else:
                     # Run the status command to get diagnostic data
-                    _run_cmd(status_cmd)
+                    _run_cmd(status_cmd, sleep_between_commands_secs)
 
                     logger.error("The board CANNOT be ACTIVATED. Ending the test.")
                     raise RuntimeError
             else:
                 # Writing values to board
-                logger.info("\n*** WRITING VALUE TO BOARD ***")
-                _write_values_to_board(test_duration_seconds / 2 if test_duration_seconds < 600 else test_duration_seconds)
+                logger.info("--- WRITING VALUE TO BOARD ---")
+                write_values(board_ip_address, value_count=value_quantity_to_write_to_fpga,
+                             sleep_secs=sleep_after_fpga_writes_secs)
+                logger.info("\n\n=== Ending Test Iteration: {0} ===".format(run_count))
                 break
 
 
@@ -150,7 +156,7 @@ def _run_cmd(cmd, sleep_secs=30):
     sleep_secs : int
         The number of seconds to sleep after the command run is finished.
     """
-    logger.info("----- Running IPMI comand: -----")
+    logger.info("## Running IPMI comand: ##")
     logger.info(cmd)
 
     proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
@@ -161,12 +167,12 @@ def _run_cmd(cmd, sleep_secs=30):
 
     stdout_data = stdout.decode()
     if len(stdout_data):
-        logger.debug("----- stdout ------")
+        logger.debug("### stdout ###")
         logger.debug("{0}".format(stdout_data))
 
     stderr_data = stderr.decode()
     if len(stderr_data):
-        logger.debug("----- stderr ------")
+        logger.debug("### stderr ###")
         logger.debug("{0}".format(stderr.decode()))
 
     _count_down_sleep_status(sleep_secs)
@@ -174,7 +180,7 @@ def _run_cmd(cmd, sleep_secs=30):
 
 def _detect_board_active(board_ip_address, expected_board_is_active, ping_count=5):
     """
-    Detect if the board is active or not, and compare the board's actiness with the expectation. The detection is
+    Detect if the board is active or not, and compare the board's activeness with the expectation. The detection is
     accomplished by pinging the board's IP address. If the ping command's return code is 0, the board is determined
     to be active. Otherwise, the board is determined to be inactive.
 
@@ -184,30 +190,29 @@ def _detect_board_active(board_ip_address, expected_board_is_active, ping_count=
         The IP address of the board
     expected_board_is_active : bool
         True if the board is expected to be active; False if not
-    timeout : int
-        The timeout for the detection command, in seconds
+    ping_count : int
+        The number of pings to send
     """
-    logger.info("\n\n----- Detecting if the board is active -----")
+    logger.info("\n\n#### Detecting if the board is active ####")
 
-    # Send 10 pings (pinging for about 10 seconds)
     proc = Popen("ping " + board_ip_address + " -c " + str(ping_count), shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
     return_code = proc.returncode
 
-    status = stdout.decode()
-    error = stderr.decode()
+    status_data = stdout.decode()
+    error_data = stderr.decode()
 
     if expected_board_is_active:
         if return_code != 0:
             logger.debug("The board is expected to be ACTIVE, but it does not respond to {0} pings.\n"
-                         "stdout: {1}\n\nstderr: {2}\n".format(ping_count, status, error))
+                         "stdout: {1}\n\nstderr: {2}\n".format(ping_count, status_data, error_data))
             return False
         else:
             logger.info("The board is ACTIVE, as expected.")
     elif not expected_board_is_active:
         if return_code == 0:
             logger.debug("The board is expected to be INACTIVE, but it still responds after {0} pings.\n"
-                         "stdout: {1}\n\nstderr: {2}\n".format(ping_count, status, error))
+                         "stdout: {1}\n\nstderr: {2}\n".format(ping_count, status_data, error_data))
             return False
         else:
             logger.info("The board is INACTIVE, as expected.")
@@ -216,16 +221,48 @@ def _detect_board_active(board_ip_address, expected_board_is_active, ping_count=
     return True
 
 
-def _write_values_to_board(sleep_secs=600):
+def write_values(board_ip_address, value_count=20000, sleep_secs=600):
     """
-    Write some values to the board to test the board's responsiveness.
+    Use pyrogue to write values into the FPGA
 
     Parameters
     ----------
+    board_ip_address : str
+        The IP address used to connect to the FPGA board
+    value_count : int
+        The number of values to write, default at 20,000
     sleep_secs : int
         The amount of time to sleep after the value writes.
     """
-    write_values()
+    # Set base
+    base = pr.Root(name='AMCc', description='')
+
+    # Add Base Device
+    base.add(FpgaTopLevel(
+        commType='eth-rssi-interleaved',
+        ipAddr=board_ip_address,
+        pcieRssiLink=4
+    ))
+
+    # Start the system
+    base.start(
+        pollEn=1,
+    )
+
+    # Print the AxiVersion Summary
+    base.FpgaTopLevel.AmcCarrierCore.AxiVersion.printStatus()
+
+    for i in range(value_count):
+        logger.info("## Writing value: {0} to board ##".format(i))
+        base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.set(i, write=True)
+
+        ret = base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.get()
+        logger.debug("## Reading value: {0} from board ##".format(ret))
+
+        time.sleep(0.01)
+
+    # Close
+    base.stop()
     _count_down_sleep_status(sleep_secs)
 
 
