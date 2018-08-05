@@ -26,10 +26,11 @@ def main():
 
     verbose_logging = vars(args)["verbose_logging"]
 
-    # Now set the logging level for just the test. The pyrogue logging level will still be at logging.WARNING
     if verbose_logging:
+        # This affects the test logger
         logger.setLevel(logging.DEBUG)
 
+        # This affects the global logger, which affects the pyrogue logger
         global_logger = logging.getLogger()
         global_logger.setLevel(logging.DEBUG)
 
