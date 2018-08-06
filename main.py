@@ -93,9 +93,10 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
         raise SystemError
 
     run_count = 0
-    sleep_between_commands_secs = test_configs["test"]["sleep_between_commands_secs"]
-    sleep_after_fpga_writes_secs = test_configs["test"]["sleep_after_fpga_writes_secs"]
-    value_quantity_to_write_to_fpga = test_configs["test"]["value_quantity_to_write_to_fpga"]
+    sleep_between_commands_secs = int(test_configs["test"]["sleep_between_commands_secs"])
+    sleep_after_fpga_writes_secs = int(test_configs["test"]["sleep_after_fpga_writes_secs"])
+    value_quantity_to_write_to_fpga = int(test_configs["test"]["value_quantity_to_write_to_fpga"])
+    ddr_read_cycles = int(test_configs["test"]["ddr_read_cycles"])
 
     while True:
         run_count += 1
@@ -105,7 +106,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
         retry_count = 0
         # Running board deactivation test
         while retry_count <= retries_on_test_phase_failure:
-            logger.info("--- BOARD DEACTIVATION ---")
+            logger.info("\n--- BOARD DEACTIVATION ---")
             _run_cmd(deactivation_cmd, sleep_between_commands_secs)
             if not _detect_board_active(board_ip_address, expected_board_is_active=False):
                 if retry_count < retries_on_test_phase_failure:
@@ -124,7 +125,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
 
         # Running board activation test
         while retry_count < retries_on_test_phase_failure:
-            logger.info("--- BOARD ACTIVATION ---")
+            logger.info("\n--- BOARD ACTIVATION ---")
             _run_cmd(activation_cmd, sleep_between_commands_secs)
             if not _detect_board_active(board_ip_address, expected_board_is_active=True):
                 if retry_count < retries_on_test_phase_failure:
@@ -140,8 +141,8 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
             else:
                 # Writing values to board
                 logger.info("--- WRITING VALUE TO BOARD ---")
-                write_values(board_ip_address, value_count=value_quantity_to_write_to_fpga,
-                             sleep_secs=sleep_after_fpga_writes_secs)
+                run_stress_activities(board_ip_address, write_value_count=value_quantity_to_write_to_fpga,
+                                      ddr_read_cycles=ddr_read_cycles, sleep_secs=sleep_after_fpga_writes_secs)
                 logger.info("\n\n=== Ending Test Iteration: {0} ===".format(run_count))
                 break
 
@@ -194,7 +195,10 @@ def _detect_board_active(board_ip_address, expected_board_is_active, ping_count=
     ping_count : int
         The number of pings to send
     """
-    logger.info("\n\n#### Detecting if the board is active ####")
+    if expected_board_is_active:
+        logger.info("\n\n--- Detecting if the board is active ---")
+    else:
+        logger.info("\n\n--- Detecting if the board is inactive ---")
 
     proc = Popen("ping " + board_ip_address + " -c " + str(ping_count), shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
@@ -218,20 +222,37 @@ def _detect_board_active(board_ip_address, expected_board_is_active, ping_count=
         else:
             logger.info("The board is INACTIVE, as expected.")
 
-    logger.info("Board activeness detection is finished.\n")
+    logger.debug("Board activeness detection is finished.\n")
     return True
 
 
-def write_values(board_ip_address, value_count=20000, sleep_secs=600):
+class StreamToLogger:
     """
-    Use pyrogue to write values into the FPGA
+    Source: http://www.electricmonk.nl/log/2011/08/14/redirect-stdout-and-stderr-to-a-logger-in-python/
+    Fake file-like stream object that redirects writes to a logger instance.
+    """
+    def __init__(self, logger, log_level=logging.INFO):
+        self.logger = logger
+        self.log_level = log_level
+        self.linebuf = ''
+
+    def write(self, buf):
+        for line in buf.rstrip().splitlines():
+            self.logger.log(self.log_level, line.rstrip())
+
+
+def run_stress_activities(board_ip_address, write_value_count=20000, ddr_read_cycles=100, sleep_secs=600):
+    """
+    Use pyrogue to stress the board by writing values into the FPGA and reading from DDR.
 
     Parameters
     ----------
     board_ip_address : str
         The IP address used to connect to the FPGA board
-    value_count : int
+    write_value_count : int
         The number of values to write, default at 20,000
+    ddr_read_cycles : int
+        The number of times to perform a DDR read
     sleep_secs : int
         The amount of time to sleep after the value writes.
     """
@@ -250,16 +271,41 @@ def write_values(board_ip_address, value_count=20000, sleep_secs=600):
         pollEn=1,
     )
 
-    # Print the AxiVersion Summary
+    logger.info("\n## BOARD SUMMARY ##\n")
+
+    # Capture the AxiVersion Summary to log
+    stdout_handler = sys.stdout
+    stderr_handler = sys.stderr
+
+    global_logger = logging.getLogger()
+    org_global_logging_level = global_logger.level
+
+    # Temporary bump up the global logging level to get the Summary printout
+    global_logger.setLevel(logging.INFO)
+    sys.stdout = StreamToLogger(global_logger, logging.INFO)
+    sys.stderr = StreamToLogger(global_logger, logging.ERROR)
+
     base.FpgaTopLevel.AmcCarrierCore.AxiVersion.printStatus()
 
-    for i in range(value_count):
-        logger.info("## Writing value: {0} to board ##".format(i))
+    # Revert to the current log level and restore stdout and stderr handlers
+    global_logger.setLevel(org_global_logging_level)
+    sys.stdout = stdout_handler
+    sys.stderr = stderr_handler
+
+    logger.info("\n## BOARD STRESSING ACTIVITIES ##\n")
+
+    for i in range(write_value_count):
+        logger.info("-- Writing value: {0} to board".format(i))
         base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.set(i, write=True)
 
         ret = base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.get()
-        logger.debug("## Reading value: {0} from board ##".format(ret))
+        logger.debug("-- Reading value: {0} from board".format(ret))
 
+        time.sleep(0.01)
+
+    for i in range(ddr_read_cycles):
+        logger.info("-- DDR read cycle {0}".format(i))
+        base.FpgaTopLevel.DDR._rawRead(offset=0x0, numWords=0x100000)
         time.sleep(0.01)
 
     # Close
