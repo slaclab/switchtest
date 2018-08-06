@@ -110,7 +110,11 @@ class TopLevel(pr.Device):
                 # Connect the SRPv3 to tDest = 0x0
                 srp = rogue.protocols.srp.SrpV3()
                 pr.streamConnectBiDir( srp, rudp.application(dest=0x0) )
-                
+               
+                # Connect SRPv3 to DDR on tDest = 0x4 
+                srpDdr = rogue.protocols.srp.SrpV3()
+                pr.streamConnectBiDir( srpDdr, rudp.application(dest=0x4) )
+
             elif ( commType == 'pcie-fsbl' ):
             
                 # Connect the SRPv0 to tDest = 0x0
@@ -182,7 +186,14 @@ class TopLevel(pr.Device):
 #            sizeSigGen   = sizeSigGen,
 #            modeSigGen   = modeSigGen,
 #        ))
-#
+
+        self.add(pr.Device(
+            name              = 'DDR',
+            memBase           = srpDdr,
+            offset            = 0x00000000,
+            size              = 0x10000000,
+        ))
+
         # Define SW trigger command
         @self.command(description="Software Trigger for DAQ MUX",)
         def SwDaqMuxTrig():
