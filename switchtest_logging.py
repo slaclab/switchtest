@@ -1,4 +1,5 @@
 import os
+import socket
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -11,9 +12,16 @@ logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
 
 # Make sure a logs directory is available
-os.makedirs("logs", exist_ok=True)
+hostname = socket.gethostname()
+log_dirname = "logs_" + hostname
 
-rotating_log_handler = RotatingFileHandler(os.path.join("logs", "switch-test.log"), maxBytes=2000000, backupCount=30)
+try:
+    os.makedirs(log_dirname)
+except os.error:
+    pass
+
+rotating_log_handler = RotatingFileHandler(os.path.join(log_dirname, "switch-test.log"), maxBytes=2000000,
+                                           backupCount=60)
 rotating_log_handler.setFormatter(log_formatter)
 logger.addHandler(rotating_log_handler)
 

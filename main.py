@@ -10,11 +10,20 @@ from switchtest_logging import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-import pyrogue as pr
-from FpgaTopLevel import *
-
 from version import VERSION
 from arg_parser import ArgParser
+
+try:
+    import pyrogue as pr
+    from FpgaTopLevel import *
+except ImportError as error:
+    logger.info("ImportError exception: {0}. Make sure you've sourced the pyrogue env script.".format(error))
+try:
+    from pycpsw import *
+except ImportError as error:
+    logger.info("ImportError exception: {0}. Make sure you've sourced the CPSW env script.".format(error))
+
+global status_cmd
 
 
 def main():
@@ -47,7 +56,9 @@ def main():
     cmd_prefix = 'ipmitool -I lan -H ' + shelf_manager + ' -t ' + str(target) + ' -b 0 -A NONE '
 
     # Get the customized status, board activation, and board deactivation commands from the user's configurations
+    global status_cmd
     status_cmd = cmd_prefix + test_configs["test"]["commands"]["status"]
+
     activation_cmd = cmd_prefix + test_configs["test"]["commands"]["activation"]
     deactivation_cmd = cmd_prefix + test_configs["test"]["commands"]["deactivation"]
 
@@ -93,10 +104,8 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
         raise SystemError
 
     run_count = 0
-    sleep_between_commands_secs = int(test_configs["test"]["sleep_between_commands_secs"])
-    sleep_after_fpga_writes_secs = int(test_configs["test"]["sleep_after_fpga_writes_secs"])
-    value_quantity_to_write_to_fpga = int(test_configs["test"]["value_quantity_to_write_to_fpga"])
-    ddr_read_cycles = int(test_configs["test"]["ddr_read_cycles"])
+    board_activation_toggle_sleep_secs = int(test_configs["test"]["board_activation_toggle_sleep_secs"])
+    sleep_after_stress_cmds_secs = int(test_configs["test"]["sleep_after_stress_cmds_secs"])
 
     while True:
         run_count += 1
@@ -107,7 +116,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
         # Running board deactivation test
         while retry_count <= retries_on_test_phase_failure:
             logger.info("\n--- BOARD DEACTIVATION ---")
-            _run_cmd(deactivation_cmd, sleep_between_commands_secs)
+            _run_cmd(deactivation_cmd, board_activation_toggle_sleep_secs)
             if not _detect_board_active(board_ip_address, expected_board_is_active=False):
                 if retry_count < retries_on_test_phase_failure:
                     retry_count += 1
@@ -115,7 +124,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
                                 .format(retry_count, retries_on_test_phase_failure))
                 else:
                     # Run the status command to get diagnostic data
-                    _run_cmd(status_cmd, sleep_between_commands_secs)
+                    _run_cmd(status_cmd, board_activation_toggle_sleep_secs, log_devel_debug=True)
 
                     logger.error("The board CANNOT be DEACTIVATED. Ending the test.")
                     raise RuntimeError
@@ -126,7 +135,7 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
         # Running board activation test
         while retry_count < retries_on_test_phase_failure:
             logger.info("\n--- BOARD ACTIVATION ---")
-            _run_cmd(activation_cmd, sleep_between_commands_secs)
+            _run_cmd(activation_cmd, board_activation_toggle_sleep_secs)
             if not _detect_board_active(board_ip_address, expected_board_is_active=True):
                 if retry_count < retries_on_test_phase_failure:
                     retry_count += 1
@@ -134,20 +143,35 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
                                 .format(retry_count, retries_on_test_phase_failure))
                 else:
                     # Run the status command to get diagnostic data
-                    _run_cmd(status_cmd, sleep_between_commands_secs)
+                    _run_cmd(status_cmd, board_activation_toggle_sleep_secs, log_level_debug=True)
 
                     logger.error("The board CANNOT be ACTIVATED. Ending the test.")
                     raise RuntimeError
             else:
-                # Writing values to board
-                logger.info("--- WRITING VALUE TO BOARD ---")
-                run_stress_activities(board_ip_address, write_value_count=value_quantity_to_write_to_fpga,
-                                      ddr_read_cycles=ddr_read_cycles, sleep_secs=sleep_after_fpga_writes_secs)
+                run_pyrogue_stress_cmds = test_configs["test"]["mode"]["run_pyrogue_stress_cmds"]
+                run_cpsw_stress_cmds = test_configs["test"]["mode"]["run_cpsw_stress_cmds"]
+
+                if run_pyrogue_stress_cmds:
+                    value_quantity_to_write_to_fpga = int(
+                        test_configs["test"]["pyrogue"]["value_quantity_to_write_to_fpga"])
+                    ddr_read_cycles = int(test_configs["test"]["pyrogue"]["ddr_read_cycles"])
+
+                    run_pyrogue_stress_activities(board_ip_address, write_value_count=value_quantity_to_write_to_fpga,
+                                                  ddr_read_cycles=ddr_read_cycles,
+                                                  sleep_secs=sleep_after_stress_cmds_secs)
+                if run_cpsw_stress_cmds:
+                    yaml_filename = test_configs["test"]["cpsw"]["yaml_filename"]
+                    value_quantity_to_write_to_fpga = int(
+                        test_configs["test"]["cpsw"]["value_quantity_to_write_to_fpga"])
+
+                    run_cpsw_stress_activities(yaml_filename, value_quantity_to_write_to_fpga,
+                                               sleep_secs=sleep_after_stress_cmds_secs)
+
                 logger.info("\n\n=== Ending Test Iteration: {0} ===".format(run_count))
                 break
 
 
-def _run_cmd(cmd, sleep_secs=30):
+def _run_cmd(cmd, sleep_secs=30, log_level_debug=False):
     """
     Run a test command, and then sleep for a few seconds.
 
@@ -157,6 +181,8 @@ def _run_cmd(cmd, sleep_secs=30):
         The test command to run
     sleep_secs : int
         The number of seconds to sleep after the command run is finished.
+    log_level_debug : bool
+        True if to force the log level to DEBUG; False if to keep the current log level
     """
     logger.info("## Running IPMI comand: ##")
     logger.info(cmd)
@@ -166,6 +192,9 @@ def _run_cmd(cmd, sleep_secs=30):
     return_code = proc.returncode
 
     logger.info("Return Code: {0}\n".format(return_code))
+
+    if log_level_debug:
+        logger.setLevel(logging.DEBUG)
 
     stdout_data = stdout.decode()
     if len(stdout_data):
@@ -241,9 +270,9 @@ class StreamToLogger:
             self.logger.log(self.log_level, line.rstrip())
 
 
-def run_stress_activities(board_ip_address, write_value_count=20000, ddr_read_cycles=100, sleep_secs=600):
+def run_pyrogue_stress_activities(board_ip_address, write_value_count=20000, ddr_read_cycles=100, sleep_secs=600):
     """
-    Use pyrogue to stress the board by writing values into the FPGA and reading from DDR.
+    Use pyrogue to stress the board by writing values to the FPGA and reading from DDR.
 
     Parameters
     ----------
@@ -257,59 +286,105 @@ def run_stress_activities(board_ip_address, write_value_count=20000, ddr_read_cy
         The amount of time to sleep after the value writes.
     """
     # Set base
-    base = pr.Root(name='AMCc', description='')
+    with pr.Root(name='AMCc', description='') as base:
+        # Add Base Device
+        base.add(FpgaTopLevel(
+            commType='eth-rssi-interleaved',
+            ipAddr=board_ip_address,
+            pcieRssiLink=4
+        ))
 
-    # Add Base Device
-    base.add(FpgaTopLevel(
-        commType='eth-rssi-interleaved',
-        ipAddr=board_ip_address,
-        pcieRssiLink=4
-    ))
+        # Start the system
+        logger.info("Start base")
+        base.start(
+            pollEn=1,
+        )
 
-    # Start the system
-    base.start(
-        pollEn=1,
-    )
+        logger.info("\n## BOARD SUMMARY ##\n")
 
-    logger.info("\n## BOARD SUMMARY ##\n")
+        # Capture the AxiVersion Summary to log
+        stdout_handler = sys.stdout
+        stderr_handler = sys.stderr
 
-    # Capture the AxiVersion Summary to log
-    stdout_handler = sys.stdout
-    stderr_handler = sys.stderr
+        global_logger = logging.getLogger()
+        org_global_logging_level = global_logger.level
 
-    global_logger = logging.getLogger()
-    org_global_logging_level = global_logger.level
+        # Temporary bump up the global logging level to get the Summary printout
+        global_logger.setLevel(logging.INFO)
+        sys.stdout = StreamToLogger(global_logger, logging.INFO)
+        sys.stderr = StreamToLogger(global_logger, logging.ERROR)
 
-    # Temporary bump up the global logging level to get the Summary printout
-    global_logger.setLevel(logging.INFO)
-    sys.stdout = StreamToLogger(global_logger, logging.INFO)
-    sys.stderr = StreamToLogger(global_logger, logging.ERROR)
+        base.FpgaTopLevel.AmcCarrierCore.AxiVersion.printStatus()
 
-    base.FpgaTopLevel.AmcCarrierCore.AxiVersion.printStatus()
+        # Revert to the current log level and restore stdout and stderr handlers
+        global_logger.setLevel(org_global_logging_level)
+        sys.stdout = stdout_handler
+        sys.stderr = stderr_handler
 
-    # Revert to the current log level and restore stdout and stderr handlers
-    global_logger.setLevel(org_global_logging_level)
-    sys.stdout = stdout_handler
-    sys.stderr = stderr_handler
+        logger.info("\n## BOARD STRESSING ACTIVITIES ##\n")
 
-    logger.info("\n## BOARD STRESSING ACTIVITIES ##\n")
+        for i in range(write_value_count):
+            logger.info("-- pyrogue: Writing value: {0} to board".format(i))
+            for h in logger.handlers:
+                h.flush()
+            base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.set(i, write=True)
+
+            value = base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.get()
+            logger.debug("-- pyrogue: Reading value: {0} from board".format(value))
+            for h in logger.handlers:
+                h.flush()
+
+            time.sleep(0.01)
+
+        for i in range(ddr_read_cycles):
+            logger.info("-- pyrogue: DDR read cycle {0}".format(i))
+            for h in logger.handlers:
+                h.flush()
+            base.FpgaTopLevel.DDR._rawRead(offset=0x0, numWords=0x100000)
+
+            time.sleep(0.01)
+
+        # Close
+        logger.debug("Stopping base")
+        base.stop()
+
+        logger.debug("Stopping stream")
+        base.FpgaTopLevel.stream.stop()
+        logger.debug("Stopping finished.")
+
+    _count_down_sleep_status(sleep_secs)
+
+
+def run_cpsw_stress_activities(yaml_filename, write_value_count=20000, sleep_secs=600):
+    """
+    Use CPSW to stress the board by writing values to and then reading these from the FPGA
+
+    Parameters
+    ----------
+    yaml_filename : str
+        The CPSW YAML file containing the read/write specifications
+    write_value_count : int
+        The number of values to write, default at 20,000
+    sleep_secs : int
+        The amount of time to sleep after the value writes.
+    """
+    top_dev = "NetIODev"
+    root = Path.loadYamlFile("cpsw_yaml/" + str(yaml_filename), top_dev)
+
+    scratch_pad = ScalVal.create(root.findByName("mmio/AmcCarrierCore/AxiVersion/ScratchPad"))
 
     for i in range(write_value_count):
-        logger.info("-- Writing value: {0} to board".format(i))
-        base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.set(i, write=True)
+        logger.info("-- CPSW: Writing value: {0} to board".format(i))
+        for h in logger.handlers:
+            h.flush()
+        scratch_pad.setVal(i)
 
-        ret = base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.get()
-        logger.debug("-- Reading value: {0} from board".format(ret))
+        value = scratch_pad.getVal()
+        logger.debug("-- CPSW: Reading value: {0} from board".format(value))
+        for h in logger.handlers:
+            h.flush()
 
         time.sleep(0.01)
-
-    for i in range(ddr_read_cycles):
-        logger.info("-- DDR read cycle {0}".format(i))
-        base.FpgaTopLevel.DDR._rawRead(offset=0x0, numWords=0x100000)
-        time.sleep(0.01)
-
-    # Close
-    base.stop()
     _count_down_sleep_status(sleep_secs)
 
 
@@ -370,7 +445,9 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        logger.error("Unexpected exception while running the test. Exception type: {0}. Exception: {1}"
+        # Run the status command to get diagnostic data
+        _run_cmd(status_cmd, 10, log_level_debug=True)
+        logger.error("\nUnexpected exception while running the test. Exception type: {0}. Exception: {1}"
                      .format(type(error), error))
 
 

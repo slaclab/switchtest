@@ -106,7 +106,8 @@ class TopLevel(pr.Device):
 
                 # Create Interleaved RSSI interface
                 rudp = self.stream = pyrogue.protocols.UdpRssiPack( name='rudp', host=ipAddr, port=8198, packVer = 2)
-                
+
+                self.add(rudp)
                 # Connect the SRPv3 to tDest = 0x0
                 srp = rogue.protocols.srp.SrpV3()
                 pr.streamConnectBiDir( srp, rudp.application(dest=0x0) )
