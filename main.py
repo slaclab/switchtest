@@ -321,25 +321,19 @@ def run_pyrogue_stress_activities(board_ip_address, write_value_count=20000, ddr
         sys.stdout = stdout_handler
         sys.stderr = stderr_handler
 
-        logger.info("\n## BOARD STRESSING ACTIVITIES ##\n")
+        logger.info("-- pyrogue: Start writing to and reading values from the board --")
 
         for i in range(write_value_count):
-            logger.info("-- pyrogue: Writing value: {0} to board".format(i))
-            for h in logger.handlers:
-                h.flush()
+            logger.debug("-- pyrogue: Writing value: {0} to board".format(i))
             base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.set(i, write=True)
 
             value = base.FpgaTopLevel.AmcCarrierCore.AxiVersion.ScratchPad.get()
-            logger.debug("-- pyrogue: Reading value: {0} from board".format(value))
-            for h in logger.handlers:
-                h.flush()
+            logger.info("-- pyrogue: Reading value: {0} from board".format(value))
 
             time.sleep(0.01)
 
         for i in range(ddr_read_cycles):
             logger.info("-- pyrogue: DDR read cycle {0}".format(i))
-            for h in logger.handlers:
-                h.flush()
             base.FpgaTopLevel.DDR._rawRead(offset=0x0, numWords=0x100000)
 
             time.sleep(0.01)
@@ -352,6 +346,7 @@ def run_pyrogue_stress_activities(board_ip_address, write_value_count=20000, ddr
         base.FpgaTopLevel.stream.stop()
         logger.debug("Stopping finished.")
 
+    logger.info("-- pyrogue: End writing to and reading values from the board --")
     _count_down_sleep_status(sleep_secs)
 
 
@@ -373,18 +368,17 @@ def run_cpsw_stress_activities(yaml_filename, write_value_count=20000, sleep_sec
 
     scratch_pad = ScalVal.create(root.findByName("mmio/AmcCarrierCore/AxiVersion/ScratchPad"))
 
+    logger.info("-- CPSW: Start writing to and reading values from the board... --")
     for i in range(write_value_count):
-        logger.info("-- CPSW: Writing value: {0} to board".format(i))
-        for h in logger.handlers:
-            h.flush()
+        logger.debug("-- CPSW: Writing value: {0} to board".format(i))
         scratch_pad.setVal(i)
 
         value = scratch_pad.getVal()
-        logger.debug("-- CPSW: Reading value: {0} from board".format(value))
-        for h in logger.handlers:
-            h.flush()
+        logger.info("-- CPSW: Reading value: {0} from board".format(value))
 
         time.sleep(0.01)
+
+    logger.info("-- CPSW: End writing to and reading values from the board --")
     _count_down_sleep_status(sleep_secs)
 
 
