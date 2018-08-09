@@ -164,7 +164,8 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
                     value_quantity_to_write_to_fpga = int(
                         test_configs["test"]["cpsw"]["value_quantity_to_write_to_fpga"])
 
-                    run_cpsw_stress_activities(yaml_filename, value_quantity_to_write_to_fpga)
+                    run_cpsw_stress_activities(yaml_filename, value_quantity_to_write_to_fpga,
+                                               sleep_secs=sleep_after_stress_cmds_secs)
 
                 logger.info("\n\n=== Ending Test Iteration: {0} ===".format(run_count))
                 break
