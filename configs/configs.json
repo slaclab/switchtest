@@ -1,15 +1,26 @@
 {
+  "__version__": "1.1.0",
   "hardware": {
     "shelf_manager": "shm-b084-sp02",
     "slot": 6,
     "fpga_board_ip_address": "10.0.2.106"
   },
   "test": {
+    "mode": {
+      "run_pyrogue_stress_cmds": true,
+      "run_cpsw_stress_cmds": false
+    },
     "cycles_to_run": 1,
-    "sleep_between_commands_secs": 30,
-    "sleep_after_fpga_writes_secs": 600,
-    "value_quantity_to_write_to_fpga": 20000,
-    "ddr_read_cycles": 100,
+    "board_activation_toggle_sleep_secs": 30,
+    "sleep_after_stress_cmds_secs": 10,
+    "pyrogue": {
+      "value_quantity_to_write_to_fpga": 20000,
+      "ddr_read_cycles": 100
+    },
+    "cpsw": {
+      "yaml_filename": "000TopLevel.yaml",
+      "value_quantity_to_write_to_fpga": 20000
+    },
     "commands": {
       "status": "sensor get \"Hot Swap\"",
       "activation": "picmg policy set 0 1 0",
