@@ -18,28 +18,32 @@ The test performs the following steps in a loop:
    - If the board is not active, terminate the test and require the user to activate the board
 2. If the board is active, deactivate the board  by running the IPMI command 
 
-   <code>ipmitool -I lan -H <shelf_manager_hostname> -t <fpga_board_target_number> -b 0 -A NONE picmg deactivate 0</code>
- 
+   ```
+   ipmitool -I lan -H <shelf_manager_hostname> -t <fpga_board_target_number> -b 0 -A NONE picmg deactivate 0</code>
+   ```
    then sleep for 30 seconds. The Shelf Manager hostname, the FPGA IP address, and the sleep time are user-customizable by modifying the configs.json file, which is part of the test structure.
 
 3. Detect if the board is inactive
    - If the board is still active, retry the deactivation command, and then try to detect if the board is inactive, again
    - If after 10 trials and the board is still active, run the IPMI command 
 
-        <code>ipmitool -I lan -H <shelf_manager_hostname> -t <fpga_board_target_number> -b 0 -A NONE sensor get "Hot Swap"</code>
-    
+     ```
+     ipmitool -I lan -H <shelf_manager_hostname> -t <fpga_board_target_number> -b 0 -A NONE sensor get "Hot Swap"
+     ```
      to get a snapshot of the current FPGA status, then terminate the test.
 
  4. If the board is inactive, activate the board  by running the IPMI command 
 
-        <code>ipmitool -I lan -H <shelf_manager_hostname> -t <fpga_board_target_number> -b 0 -A NONE picmg policy set 0 1 0</code>
-
+    ```
+    ipmitool -I lan -H <shelf_manager_hostname> -t <fpga_board_target_number> -b 0 -A NONE picmg policy set 0 1 0
+    ```
     then sleep for 30 seconds (customizable)
    
     - If the board is still inactive, retry the activation command, and then try to detect if the board is active, again
     - If after 10 trials and the board is still inactive, run the IPMI command 
-
-         <code>ipmitool -I lan -H <shelf_manager_hostname> -t <fpga_board_target_number> -b 0 -A NONE sensor get "Hot Swap" </code>
+         ```
+         ipmitool -I lan -H <shelf_manager_hostname> -t <fpga_board_target_number> -b 0 -A NONE sensor get "Hot Swap"
+         ```
       to get a snapshot of the current FPGA status, then terminate the test.
 
 5. Run a series of pyrogue I/O activities to stress the board
