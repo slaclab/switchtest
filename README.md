@@ -87,13 +87,12 @@ The test activities are logged into rotating log files. Each file can contain up
 * deactivation	The IPMI command portion to activate an FPGA. This can be modified if the board model requires a different IPMI activation command, e.g. "picmg policyset 0 0 1".
 
 ## Running the Test
-Testing with pyrogue:
+### Testing with pyrogue:
 ```
 source pyrogue_setup.sh
 python3 main.py <config_file_path> [--verbose-loggging]
 ```
-
-Examples
+#### Examples
 ```
 source pyrogue_setup.sh
 python3 main.py configs/configs.json
@@ -104,13 +103,12 @@ source pyrogue_setup.sh
 python3 main.py configs/configs.json --verbose-logging
 ```
 
-Testing with CPSW
+### Testing with CPSW
 ```
 source cpsw_setup.sh
 python main.py <config_file_path> [--verbose-loggging]
 ```
-
-Examples
+#### Examples
 ```
 source cpsw_setup.sh
 python main.py configs/configs.json
@@ -120,7 +118,6 @@ or
 source cpsw_setup.sh
 python main.py configs/configs.json --verbose-logging
 ```
-
 ### Note
 * The env script for running the test with pyrogue is pyrogue_setup.sh, and with CPSW is cpsw_setup.sh
 * While pyrogue can be run with Python 3, CPSW can only be run with Python 2.7.
