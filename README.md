@@ -126,9 +126,5 @@ python main.py configs/configs.json --verbose-logging
 * While pyrogue can be run with Python 3, CPSW can only be run with Python 2.7.
 
 ### Command Line Parameters
-* Without the --verbose-logging parameter, the test will not log the INFO and DEBUG statements from pyrogue, and will only log any pyrogue WARNING and ERROR statements together with the test's INFO, WARNING, and ERROR statements.
-* With the --verbose-logging parameter, the test will log all the INFO and DEBUG statements from pyrogue, and will also log the test's DEBUG, INFO, WARNING, and ERROR statements.
-
-## Command Line Parameters
-* Without the <code>--verbose-logging</code> parameter, the test will not log the INFO and DEBUG statements from pyrogue, and will only log any pyrogue WARNING and ERROR statements together with the test's INFO, WARNING, and ERROR statements.
-* With the <code>--verbose-logging parameter</code>, the test will not all the INFO and DEBUG statements from pyrogue, and will also log the test's DEBUG, INFO, WARNING, and ERROR statements.
+* Without the ```--verbose-logging``` parameter, the test will not log the INFO and DEBUG statements from pyrogue, and will only log any pyrogue WARNING and ERROR statements together with the test's INFO, WARNING, and ERROR statements.
+* With the ```--verbose-logging parameter```, the test will not all the INFO and DEBUG statements from pyrogue, and will also log the test's DEBUG, INFO, WARNING, and ERROR statements.
