@@ -36,7 +36,7 @@ def main():
 
     # If the user provides a logdir path, use it. Otherwise, use the default, ./logs_{hostname}/
     log_dir_path = test_configs["test"].get("custom_log_directory_path", None)
-    print("log_dir_path: {}".format(log_dir_path))
+    logger.info("Log Directory: {0}".format(log_dir_path))
     if not log_dir_path:
         hostname = socket.gethostname()
         log_dir_path = "./logs_" + hostname
@@ -50,15 +50,13 @@ def main():
     rotating_log_handler = RotatingFileHandler(os.path.join(log_dir_path, "switch-test.log"), maxBytes=2000000,
                                                backupCount=60)
     rotating_log_handler.setFormatter(log_formatter)
-    logger.addHandler(rotating_log_handler)
+
+    global_logger = logging.getLogger()
+    global_logger.addHandler(rotating_log_handler)
 
     verbose_logging = vars(args)["verbose_logging"]
     if verbose_logging:
-        # This affects the test logger
-        logger.setLevel(logging.DEBUG)
-
         # This affects the global logger, which affects the pyrogue logger
-        global_logger = logging.getLogger()
         global_logger.setLevel(logging.DEBUG)
 
     logger.info("\n\n############ TEST STARTS #############\n")
