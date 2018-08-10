@@ -87,7 +87,7 @@ The test activities are logged into rotating log files. Each file can contain up
 * deactivation	The IPMI command portion to activate an FPGA. This can be modified if the board model requires a different IPMI activation command, e.g. "picmg policyset 0 0 1".
 
 ## Running the Test
-### Testing with pyrogue:
+### Testing with pyrogue
 ```
 source pyrogue_setup.sh
 python3 main.py <config_file_path> [--verbose-loggging]
