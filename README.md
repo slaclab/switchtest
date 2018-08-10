@@ -85,6 +85,7 @@ The test activities are logged into rotating log files. Each file can contain up
 
 ## Running the Test
 Testing with pyrogue:
+
 <code>
 source pyrogue_setup.sh
 python3 main.py <config_file_path> [--verbose-loggging]
@@ -120,12 +121,12 @@ python main.py configs/configs.json --verbose-logging
 </code>
 
 ### Note
-The env script for running the test with pyrogue is pyrogue_setup.sh, and with CPSW is cpsw_setup.sh
-While pyrogue can be run with Python 3, CPSW can only be run with Python 2.7.
+* The env script for running the test with pyrogue is pyrogue_setup.sh, and with CPSW is cpsw_setup.sh
+* While pyrogue can be run with Python 3, CPSW can only be run with Python 2.7.
 
 ### Command Line Parameters
-Without the --verbose-logging parameter, the test will not log the INFO and DEBUG statements from pyrogue, and will only log any pyrogue WARNING and ERROR statements together with the test's INFO, WARNING, and ERROR statements.
-With the --verbose-logging parameter, the test will log all the INFO and DEBUG statements from pyrogue, and will also log the test's DEBUG, INFO, WARNING, and ERROR statements.
+* Without the --verbose-logging parameter, the test will not log the INFO and DEBUG statements from pyrogue, and will only log any pyrogue WARNING and ERROR statements together with the test's INFO, WARNING, and ERROR statements.
+* With the --verbose-logging parameter, the test will log all the INFO and DEBUG statements from pyrogue, and will also log the test's DEBUG, INFO, WARNING, and ERROR statements.
 
 ## Command Line Parameters
 * Without the <code>--verbose-logging</code> parameter, the test will not log the INFO and DEBUG statements from pyrogue, and will only log any pyrogue WARNING and ERROR statements together with the test's INFO, WARNING, and ERROR statements.
