@@ -6,6 +6,7 @@
     "fpga_board_ip_address": "10.0.2.106"
   },
   "test": {
+    "custom_log_directory_path": "./logs",
     "mode": {
       "run_pyrogue_stress_cmds": true,
       "run_cpsw_stress_cmds": false
