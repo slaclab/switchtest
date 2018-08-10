@@ -2,11 +2,13 @@
 
 import sys
 import os
+import socket
 from subprocess import Popen, PIPE
 import json
 import time
+from logging.handlers import RotatingFileHandler
 
-from switchtest_logging import logging
+from switchtest_logging import logging, log_formatter
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -27,14 +29,30 @@ global status_cmd
 
 
 def main():
-    # Parsing command arguments
+    # Parsing command arguments and configurations from the configs file
     args = _parse_arguments()
-
     config_file = vars(args)["config-file"]
     test_configs = _parse_config_file(config_file)
 
-    verbose_logging = vars(args)["verbose_logging"]
+    # If the user provides a logdir path, use it. Otherwise, use the default, ./logs_{hostname}/
+    log_dir_path = test_configs["test"].get("custom_log_directory_path", None)
+    print("log_dir_path: {}".format(log_dir_path))
+    if not log_dir_path:
+        hostname = socket.gethostname()
+        log_dir_path = "./logs_" + hostname
+    try:
+        os.makedirs(log_dir_path)
+    except os.error as err:
+        # It's OK if the log directory exists. This is to be compatible with Python 2.7
+        if err.errno != os.errno.EEXIST:
+            raise err
 
+    rotating_log_handler = RotatingFileHandler(os.path.join(log_dir_path, "switch-test.log"), maxBytes=2000000,
+                                               backupCount=60)
+    rotating_log_handler.setFormatter(log_formatter)
+    logger.addHandler(rotating_log_handler)
+
+    verbose_logging = vars(args)["verbose_logging"]
     if verbose_logging:
         # This affects the test logger
         logger.setLevel(logging.DEBUG)
@@ -123,9 +141,6 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
                     logger.info("Retrying board deactivation. Attempt {0} out of {1}"
                                 .format(retry_count, retries_on_test_phase_failure))
                 else:
-                    # Run the status command to get diagnostic data
-                    _run_cmd(status_cmd, board_activation_toggle_sleep_secs, log_devel_debug=True)
-
                     logger.error("The board CANNOT be DEACTIVATED. Ending the test.")
                     raise RuntimeError
             else:
@@ -142,9 +157,6 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
                     logger.info("Retrying board activation. Attempt {0} out of {1}"
                                 .format(retry_count, retries_on_test_phase_failure))
                 else:
-                    # Run the status command to get diagnostic data
-                    _run_cmd(status_cmd, board_activation_toggle_sleep_secs, log_level_debug=True)
-
                     logger.error("The board CANNOT be ACTIVATED. Ending the test.")
                     raise RuntimeError
             else:
@@ -439,10 +451,12 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        # Run the status command to get diagnostic data
-        _run_cmd(status_cmd, 10, log_level_debug=True)
         logger.error("\nUnexpected exception while running the test. Exception type: {0}. Exception: {1}"
                      .format(type(error), error))
+        for h in logger.handlers:
+            h.flush()
 
-
+        # Run the status command to get diagnostic data
+        _run_cmd(status_cmd, 10, log_level_debug=True)
+        logger.info("Ending the test...")
 
