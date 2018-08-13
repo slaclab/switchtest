@@ -12,6 +12,8 @@ from switchtest_logging import logging, log_formatter
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+import traceback
+
 from version import VERSION
 from arg_parser import ArgParser
 
@@ -26,6 +28,7 @@ except ImportError as error:
     logger.info("ImportError exception: {0}. Make sure you've sourced the CPSW env script.".format(error))
 
 global status_cmd
+global board_ip_address
 
 
 def main():
@@ -113,7 +116,9 @@ def run_test(activation_cmd, deactivation_cmd, status_cmd, test_configs, retries
         logger.info("Looping the test {0} times. Press <Ctrl-C> to terminate.".format(test_duration))
 
     # Make sure the board is active before starting the test
+    global board_ip_address
     board_ip_address = test_configs["hardware"]["fpga_board_ip_address"]
+
     is_board_active = _detect_board_active(board_ip_address, expected_board_is_active=True)
     if not is_board_active:
         logger.error("Cannot start the test. The board has to be activated first.")
@@ -451,10 +456,13 @@ if __name__ == "__main__":
     except Exception as error:
         logger.error("\nUnexpected exception while running the test. Exception type: {0}. Exception: {1}"
                      .format(type(error), error))
+        traceback.print_exc()
         for h in logger.handlers:
             h.flush()
 
         # Run the status command to get diagnostic data
-        _run_cmd(status_cmd, 10, log_level_debug=True)
+        _run_cmd(status_cmd, log_level_debug=True)
+        _detect_board_active(board_ip_address, expected_board_is_active=False)
+
         logger.info("Ending the test...")
 
