@@ -59,7 +59,7 @@ The test activities are logged into rotating log files. Each file can contain up
 ## Setting up the Test
 1. Clone the switchtest GitHub depot, and source the evironment:
    ```
-   git clone https://github.com/hmbui/switchtest
+   git clone https://github.com/slaclab/switchtest
    ```
    For pyrogue stress activity commands:
    ```
@@ -120,7 +120,6 @@ python main.py configs/configs.json --verbose-logging
 ```
 ### Note
 * The env script for running the test with pyrogue is pyrogue_setup.sh, and with CPSW is cpsw_setup.sh
-* While pyrogue can be run with Python 3, CPSW can only be run with Python 2.7.
 
 ### Command Line Parameters
 * Without the ```--verbose-logging``` parameter, the test will not log the INFO and DEBUG statements from pyrogue, and will only log any pyrogue WARNING and ERROR statements together with the test's INFO, WARNING, and ERROR statements.
